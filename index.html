@@ -1,0 +1,1209 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mapa do Construtor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@500;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: mapa em tela cheia (canvas) + gaveta de controles à esquerda que some no modo projeção */
+:root{
+  --ink:#0b1520;        /* fundo da interface */
+  --panel:#111e2c;      /* gaveta */
+  --raise:#182a3d;      /* campos e botões */
+  --line:#24394f;       /* divisórias */
+  --text:#e7eef6;
+  --muted:#8ea3b8;
+  --block:#f2b43a;      /* amarelo de bloquinho: ação principal */
+  --blue:#4c8dff;       /* seleção */
+  --danger:#ff6b5b;
+  --f-display:"Lexend","Atkinson Hyperlegible",system-ui,sans-serif;
+  --f-body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:var(--ink);color:var(--text);font-family:var(--f-body);font-size:14px;overflow:hidden}
+#stage{position:fixed;inset:0;display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+#stage.dragging{cursor:grabbing}
+#stage.placing{cursor:crosshair}
+body.projecting.idle #stage{cursor:none}
+
+#panel{
+  position:fixed;top:0;left:0;bottom:0;width:min(340px,100%);
+  background:var(--panel);border-right:1px solid var(--line);
+  overflow-y:auto;overscroll-behavior:contain;z-index:5;
+  padding-top:calc(14px + env(safe-area-inset-top,0px));
+  padding-bottom:calc(24px + env(safe-area-inset-bottom,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:16px;
+  transition:transform .25s ease;
+}
+body.panel-closed #panel,body.projecting #panel{transform:translateX(-105%)}
+.head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+h1{font-family:var(--f-display);font-weight:700;font-size:22px;line-height:1.1;margin:4px 0 0;text-wrap:balance}
+h1 span{color:var(--block)}
+section{padding:14px 0;border-bottom:1px solid var(--line);display:grid;gap:10px}
+h2{font-family:var(--f-display);font-weight:500;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.row.split{justify-content:space-between}
+button,.btn{
+  font:inherit;font-weight:700;color:var(--text);background:var(--raise);
+  border:1px solid var(--line);border-radius:8px;padding:8px 11px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;line-height:1.1;
+}
+button:hover{border-color:#3a5674}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+button.primary{background:var(--block);color:#1b1404;border-color:var(--block)}
+button.on{background:var(--blue);border-color:var(--blue);color:#fff}
+button.danger{color:var(--danger)}
+button.danger.armed{background:var(--danger);color:#fff;border-color:var(--danger)}
+button.icon{padding:8px 10px;min-width:38px;justify-content:center}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:var(--ink);padding:4px;border-radius:10px;border:1px solid var(--line)}
+.seg button{border:0;background:transparent;padding:8px 4px;justify-content:center;font-size:13px}
+.seg button.on{background:var(--block);color:#1b1404}
+label.chk{display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+label.chk input{width:18px;height:18px;accent-color:var(--block)}
+.chks{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.field{display:grid;gap:4px}
+.field>span{font-size:12px;color:var(--muted)}
+input[type=text],select,textarea{
+  font:inherit;color:var(--text);background:var(--ink);border:1px solid var(--line);
+  border-radius:8px;padding:8px 10px;width:100%;min-width:0;
+}
+textarea{min-height:70px;resize:vertical;font-size:12px}
+input[type=range]{width:100%;accent-color:var(--block)}
+.hint{font-size:12.5px;color:var(--muted);line-height:1.45;margin:0}
+.hint kbd{font-family:inherit;font-weight:700;background:var(--raise);border:1px solid var(--line);border-radius:4px;padding:0 5px;color:var(--text)}
+
+.switch{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer}
+.switch b{font-family:var(--f-display);font-weight:500}
+.switch i{width:38px;height:22px;border-radius:11px;background:var(--line);position:relative;flex:none;transition:background .2s}
+.switch i::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--text);transition:transform .2s}
+.switch[aria-pressed=true] i{background:var(--block)}
+.switch[aria-pressed=true] i::after{transform:translateX(16px);background:#1b1404}
+
+#editor{background:var(--ink);border:1px solid var(--blue);border-radius:10px;padding:12px;display:grid;gap:10px}
+#editor .ttl{font-family:var(--f-display);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--blue)}
+.list{display:grid;gap:4px}
+.item{display:grid;grid-template-columns:14px 1fr auto;gap:8px;align-items:center;padding:3px 4px;border-radius:8px}
+.item.sel{background:rgba(76,141,255,.16)}
+.item .sw{width:14px;height:14px;border-radius:3px;border:1px solid rgba(255,255,255,.35)}
+.item input[type=text]{padding:6px 8px;background:transparent;border-color:transparent}
+.item input[type=text]:hover{border-color:var(--line)}
+.item input[type=text]:focus{background:var(--ink);border-color:var(--blue)}
+.item .eye{padding:5px 7px;font-size:12px;font-weight:400;color:var(--muted);background:transparent;border-color:transparent}
+.item .eye.off{opacity:.45;text-decoration:line-through}
+.count{font-family:var(--f-display);font-weight:700;font-size:28px;color:var(--block);font-variant-numeric:tabular-nums;line-height:1}
+.count small{font-family:var(--f-body);font-size:13px;font-weight:400;color:var(--muted);margin-left:6px}
+
+.float{position:fixed;z-index:6;background:rgba(17,30,44,.92);backdrop-filter:blur(6px)}
+#openPanel{top:calc(12px + env(safe-area-inset-top,0px));left:calc(12px + env(safe-area-inset-left,0px))}
+body:not(.panel-closed) #openPanel{display:none}
+body.projecting #openPanel{display:none}
+#quick{bottom:calc(12px + env(safe-area-inset-bottom,0px));right:calc(12px + env(safe-area-inset-right,0px));display:flex;gap:6px;border-radius:12px;padding:6px;border:1px solid var(--line)}
+#quick button{background:transparent;border-color:transparent}
+#quick button:hover{background:var(--raise)}
+body.projecting #quick{display:none}
+#exitProj{top:calc(12px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));opacity:0;transition:opacity .3s;display:none}
+body.projecting #exitProj{display:inline-flex}
+body.projecting:not(.idle) #exitProj{opacity:1}
+#toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;background:var(--block);color:#1b1404;font-weight:700;padding:10px 16px;border-radius:999px;z-index:9;transition:all .25s}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media (prefers-reduced-motion:reduce){#panel,#toast,.switch i,.switch i::after{transition:none}}
+</style>
+</head>
+<body>
+
+<canvas id="stage" aria-label="Planta 2D da escola para projeção no chão"></canvas>
+
+<button id="openPanel" class="float" type="button" aria-label="Abrir controles">☰ Controles</button>
+<div id="quick" class="float" role="toolbar" aria-label="Atalhos">
+  <button id="qFit" type="button" title="Ajustar à tela">⤢ Ajustar</button>
+  <button id="qProj" type="button" title="Modo projeção (tecla H)">▣ Projetar</button>
+</div>
+<button id="exitProj" class="float" type="button">✕ Sair da projeção</button>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<aside id="panel" aria-label="Controles do mapa">
+  <div class="head">
+    <div>
+      <div class="eyebrow">Planta para projeção no chão</div>
+      <h1>Mapa do <span>Construtor</span></h1>
+    </div>
+    <button id="closePanel" class="icon" type="button" aria-label="Fechar controles">✕</button>
+  </div>
+
+  <section aria-labelledby="h-proj">
+    <h2 id="h-proj">Projeção</h2>
+    <div class="row">
+      <button id="btnProj" class="primary" type="button">▣ Modo projeção</button>
+      <button id="btnFull" type="button">⛶ Tela cheia</button>
+    </div>
+    <div class="row">
+      <button id="btnFit" type="button">⤢ Ajustar</button>
+      <button id="rotL" class="icon" type="button" aria-label="Girar à esquerda">↺</button>
+      <button id="rotR" class="icon" type="button" aria-label="Girar à direita">↻</button>
+      <label class="chk"><input type="checkbox" id="mirror"> Espelhar</label>
+    </div>
+    <label class="field"><span>Visual do mapa</span>
+      <select id="theme">
+        <option value="planta">Planta azul</option>
+        <option value="colorido">Colorido</option>
+        <option value="contorno">Só contornos (melhor para os blocos)</option>
+        <option value="clara">Fundo claro</option>
+      </select>
+    </label>
+    <div class="chks">
+      <label class="chk"><input type="checkbox" id="showLabels"> Nomes</label>
+      <label class="chk"><input type="checkbox" id="showTrees"> Árvores</label>
+      <label class="chk"><input type="checkbox" id="showGrid"> Grade 5 m</label>
+      <label class="chk"><input type="checkbox" id="showScale"> Escala</label>
+    </div>
+    <label class="field"><span>Tamanho dos nomes</span><input type="range" id="labelSize" min="8" max="44" step="1"></label>
+    <p class="hint">Arraste para mover o mapa e use a roda do mouse (ou pinça) para aproximar. No modo projeção, <kbd>H</kbd> mostra ou esconde os controles. Toque num espaço para destacá-lo no chão.</p>
+  </section>
+
+  <section aria-labelledby="h-esp">
+    <h2 id="h-esp">Espaços da escola</h2>
+    <button id="editToggle" class="switch" type="button" aria-pressed="false"><b>Editar espaços</b><i></i></button>
+    <p class="hint" id="editHint">Escreva os nomes na lista abaixo. Eles aparecem na hora no chão. Ligue “Editar espaços” para mover e redimensionar as áreas.</p>
+    <div id="editor" hidden>
+      <div class="ttl">Espaço selecionado</div>
+      <label class="field"><span>Nome</span><input type="text" id="edName" maxlength="40"></label>
+      <label class="field"><span>Tipo</span><select id="edKind"></select></label>
+      <label class="field"><span>Tamanho deste nome</span><input type="range" id="edLabelScale" min="0.4" max="2.5" step="0.1"></label>
+      <div class="row split">
+        <label class="chk"><input type="checkbox" id="edShow"> Mostrar nome</label>
+        <button id="edDelete" class="danger" type="button">Apagar</button>
+      </div>
+      <p class="hint">Arraste o espaço para mover. Puxe o quadradinho do canto para mudar o tamanho.</p>
+    </div>
+    <div class="list" id="spaceList"></div>
+    <div class="row"><button id="addSpace" type="button">＋ Novo espaço</button></div>
+  </section>
+
+  <section aria-labelledby="h-alu">
+    <h2 id="h-alu">Alunos</h2>
+    <div class="row split">
+      <div class="count" id="kidCount">0<small>alunos no mapa</small></div>
+      <button id="pauseKids" type="button">❚❚ Pausar</button>
+    </div>
+    <div class="row">
+      <button id="add1" type="button">＋1</button>
+      <button id="add10" type="button">＋10</button>
+      <button id="placeKid" type="button">⊕ Colocar com clique</button>
+      <button id="clearKids" class="danger" type="button">Remover todos</button>
+    </div>
+    <div class="field"><span>O que os alunos estão fazendo</span>
+      <div class="seg" role="group" aria-label="Atividade">
+        <button type="button" data-mode="livre">Passeio</button>
+        <button type="button" data-mode="recreio">Recreio</button>
+        <button type="button" data-mode="aula">Hora da aula</button>
+      </div>
+    </div>
+    <label class="field"><span>Velocidade</span><input type="range" id="kidSpeed" min="0.3" max="3" step="0.1"></label>
+    <label class="field"><span>Tamanho dos alunos</span><input type="range" id="kidSize" min="6" max="34" step="1"></label>
+    <label class="field"><span>Roupas</span>
+      <select id="outfit"><option value="uniforme">Uniforme (branco e azul)</option><option value="colorido">Roupas coloridas</option></select>
+    </label>
+  </section>
+
+  <section aria-labelledby="h-save">
+    <h2 id="h-save">Guardar</h2>
+    <p class="hint">Tudo fica salvo neste navegador. Para levar para outro computador, copie a configuração e cole lá.</p>
+    <div class="row">
+      <button id="copyCfg" type="button">Copiar configuração</button>
+      <button id="resetAll" class="danger" type="button">Restaurar original</button>
+    </div>
+    <label class="field"><span>Colar configuração</span><textarea id="cfgIn" placeholder="Cole aqui o texto copiado de outro computador"></textarea></label>
+    <div class="row"><button id="loadCfg" type="button">Carregar</button></div>
+  </section>
+</aside>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------- Dados da planta (1 m ≈ 4 unidades) ---------- */
+const M = 4; // unidades por metro
+const KINDS = {
+  building:  {label:'Prédio / Salas', block:true},
+  hex:       {label:'Ginásio (hexágono)', block:true, shape:'hex'},
+  court:     {label:'Quadra', zone:true, play:true},
+  field:     {label:'Campo', zone:true, play:true},
+  covered:   {label:'Área coberta', zone:true, play:true},
+  play:      {label:'Pátio pintado', zone:true, play:true},
+  playground:{label:'Parquinho', zone:true, play:true},
+  garden:    {label:'Jardim', zone:true},
+  parking:   {label:'Estacionamento'},
+  paving:    {label:'Passagem / Calçada'},
+  road:      {label:'Rua', block:true},
+};
+const DEFAULT_SPACES = [
+  {id:'rua', name:'Rua SGAS 610', kind:'road', x:40, y:-62, w:990, h:44},
+  {id:'entrada', name:'Entrada', kind:'paving', x:520, y:-18, w:62, h:150},
+  {id:'calcada', name:'Calçada', kind:'paving', x:972, y:190, w:44, h:760, show:false},
+  {id:'campo', name:'Campo de Futebol', kind:'field', x:86, y:252, w:212, h:378},
+  {id:'quadra', name:'Quadra Poliesportiva', kind:'court', x:345, y:150, w:170, h:172},
+  {id:'patio-coberto', name:'Pátio Coberto', kind:'covered', x:358, y:322, w:222, h:114},
+  {id:'estac', name:'Estacionamento', kind:'parking', x:805, y:40, w:100, h:142},
+  {id:'jardim', name:'Jardim', kind:'garden', x:672, y:684, w:184, h:262},
+  {id:'parquinho', name:'Parquinho', kind:'playground', x:690, y:842, w:104, h:80},
+  {id:'corredor', name:'Corredor', kind:'paving', x:583, y:430, w:74, h:110, show:false},
+  {id:'patio-colorido', name:'Pátio Colorido', kind:'play', x:590, y:540, w:94, h:126},
+  {id:'blocoA', name:'Bloco A', kind:'building', x:628, y:75, w:172, h:115},
+  {id:'secretaria', name:'Secretaria', kind:'building', x:810, y:192, w:82, h:84},
+  {id:'ginasio', name:'Ginásio', kind:'hex', cx:718, cy:297, r:116},
+  {id:'blocoB', name:'Salas de Aula', kind:'building', x:378, y:442, w:205, h:255},
+  {id:'blocoC', name:'Bloco C', kind:'building', x:662, y:402, w:252, h:262},
+  {id:'patio-central', name:'Pátio Central', kind:'covered', x:706, y:445, w:168, h:155},
+  {id:'blocoD', name:'Bloco D', kind:'building', x:918, y:528, w:50, h:172},
+  {id:'blocoE', name:'Bloco E', kind:'building', x:862, y:714, w:100, h:182},
+  {id:'cozinha', name:'Cozinha', kind:'building', x:392, y:712, w:136, h:140},
+  {id:'apoio', name:'Apoio', kind:'building', x:548, y:684, w:110, h:70},
+];
+const DEFAULT_TREES = [
+  [330,215,30],[345,412,32],[548,182,28],[612,176,30],[470,108,30],[575,350,13],[822,368,15],
+  [566,258,13],[650,818,44],[515,872,34],[238,425,38],[172,78,20],[408,60,24],[780,760,26],[900,920,30]
+];
+const WORLD = {x:30, y:-80, w:1000, h:1050};
+
+const DEFAULT_SETTINGS = {
+  theme:'planta', showLabels:true, showTrees:true, showGrid:false, showScale:true,
+  labelSize:20, rot:0, mirror:false, kidSpeed:1, kidSize:18, outfit:'uniforme', kidCount:24, mode:'livre'
+};
+
+/* ---------- Estado e persistência ---------- */
+const KEY = 'mapa-construtor-v1';
+const clone = o => JSON.parse(JSON.stringify(o));
+let spaces, trees, S;
+function loadState(){
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch(e) {}
+  applyConfig(saved);
+}
+function applyConfig(cfg){
+  spaces = (cfg && Array.isArray(cfg.spaces)) ? cfg.spaces : clone(DEFAULT_SPACES);
+  trees = (cfg && Array.isArray(cfg.trees)) ? cfg.trees : clone(DEFAULT_TREES);
+  S = Object.assign({}, DEFAULT_SETTINGS, (cfg && cfg.settings) || {});
+}
+let saveT = 0;
+function save(){
+  clearTimeout(saveT);
+  saveT = setTimeout(() => {
+    S.kidCount = kids.length;
+    try { localStorage.setItem(KEY, JSON.stringify({spaces, trees, settings:S})); } catch(e) {}
+  }, 300);
+}
+
+/* ---------- Temas de projeção ---------- */
+const THEMES = {
+  planta: {
+    bg:'#0f2c4c', stroke:'#dbe9ff', mark:'rgba(219,233,255,.55)', label:'#ffffff', outline:'#0b2240',
+    grid:'rgba(160,200,255,.08)', gridMajor:'rgba(160,200,255,.18)',
+    fills:{building:'rgba(219,233,255,.12)', hex:'rgba(219,233,255,.16)', court:'rgba(110,170,255,.26)', field:'rgba(120,220,160,.18)',
+      covered:'rgba(219,233,255,.06)', play:'rgba(255,190,90,.16)', playground:'rgba(255,160,120,.2)', garden:'rgba(120,220,160,.1)',
+      parking:'rgba(219,233,255,.05)', paving:'rgba(219,233,255,.05)', road:'rgba(0,0,0,.28)'},
+    tree:'rgba(120,220,160,.28)', treeEdge:'rgba(170,240,200,.75)', sel:'#f2b43a', glow:'#f2b43a', swatch:null
+  },
+  colorido: {
+    bg:'#171c22', stroke:'rgba(255,255,255,.9)', mark:'rgba(255,255,255,.85)', label:'#ffffff', outline:'#0e1216',
+    grid:'rgba(255,255,255,.05)', gridMajor:'rgba(255,255,255,.12)',
+    fills:{building:'#4b5869', hex:'#2f63c4', court:'#3b7fda', field:'#3a8a45', covered:'#78818e', play:'#3b3489',
+      playground:'#c99159', garden:'#2d6a3b', parking:'#353a41', paving:'#5a6068', road:'#24272b'},
+    tree:'rgba(46,128,62,.88)', treeEdge:'rgba(150,220,140,.9)', sel:'#f2b43a', glow:'#ffe08a'
+  },
+  contorno: {
+    bg:'#000000', stroke:'#ffffff', mark:'rgba(255,255,255,.45)', label:'#ffffff', outline:'#000000',
+    grid:'rgba(255,255,255,.08)', gridMajor:'rgba(255,255,255,.18)', fills:null,
+    tree:null, treeEdge:'rgba(255,255,255,.45)', sel:'#f2b43a', glow:'#f2b43a'
+  },
+  clara: {
+    bg:'#f3f4ef', stroke:'#1d2733', mark:'rgba(29,39,51,.55)', label:'#14202c', outline:'#ffffff',
+    grid:'rgba(29,39,51,.07)', gridMajor:'rgba(29,39,51,.16)',
+    fills:{building:'#d4dae2', hex:'#b6cbf0', court:'#98bdf1', field:'#a6d69d', covered:'#e3e6e9', play:'#ddd0f3',
+      playground:'#f1d0a2', garden:'#c3e2b9', parking:'#dcdfe2', paving:'#e9e9e2', road:'#a2a7ad'},
+    tree:'rgba(70,150,80,.55)', treeEdge:'rgba(40,100,50,.8)', sel:'#d4880a', glow:'#e09a12'
+  }
+};
+const SWATCH = THEMES.colorido.fills;
+
+/* ---------- Canvas e vista ---------- */
+const cv = document.getElementById('stage');
+const ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+const view = {zoom:1, panX:0, panY:0};
+let Mx = new DOMMatrix(), Minv = new DOMMatrix(), K = 1;
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
+}
+function panelOffset(){
+  return (document.body.classList.contains('panel-closed') || document.body.classList.contains('projecting') || W < 700) ? 0 : 340;
+}
+function computeMatrix(){
+  const rotated = S.rot % 180 !== 0;
+  const bw = rotated ? WORLD.h : WORLD.w, bh = rotated ? WORLD.w : WORLD.h;
+  const off = panelOffset();
+  const aw = W - off, ah = H;
+  const fit = Math.min(aw/bw, ah/bh) * 0.96;
+  K = fit * view.zoom;
+  Mx = new DOMMatrix()
+    .translateSelf(off + aw/2 + view.panX, ah/2 + view.panY)
+    .scaleSelf(K, K)
+    .rotateSelf(S.rot)
+    .scaleSelf(S.mirror ? -1 : 1, 1)
+    .translateSelf(-(WORLD.x + WORLD.w/2), -(WORLD.y + WORLD.h/2));
+  Minv = Mx.inverse();
+}
+const toWorld = (sx, sy) => { const p = Minv.transformPoint(new DOMPoint(sx, sy)); return {x:p.x, y:p.y}; };
+const toScreen = (wx, wy) => { const p = Mx.transformPoint(new DOMPoint(wx, wy)); return {x:p.x, y:p.y}; };
+
+/* ---------- Geometria ---------- */
+function hexPts(s){
+  const p = [];
+  for (let i = 0; i < 6; i++){ const a = Math.PI/3*i; p.push([s.cx + s.r*Math.cos(a), s.cy + s.r*Math.sin(a)]); }
+  return p;
+}
+function bbox(s){
+  if (s.kind === 'hex') return {x:s.cx - s.r, y:s.cy - s.r*0.866, w:s.r*2, h:s.r*1.732};
+  return {x:s.x, y:s.y, w:s.w, h:s.h};
+}
+function center(s){ return s.kind === 'hex' ? {x:s.cx, y:s.cy} : {x:s.x + s.w/2, y:s.y + s.h/2}; }
+function contains(s, x, y, pad = 0){
+  if (s.kind === 'hex'){
+    const dx = Math.abs(x - s.cx), dy = Math.abs(y - s.cy), r = s.r + pad;
+    return dy <= r*0.866 && 1.732*dx + dy <= 1.732*r;
+  }
+  return x >= s.x - pad && x <= s.x + s.w + pad && y >= s.y - pad && y <= s.y + s.h + pad;
+}
+function pathShape(s){
+  ctx.beginPath();
+  if (s.kind === 'hex'){ hexPts(s).forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath(); }
+  else ctx.rect(s.x, s.y, s.w, s.h);
+}
+function rng(seed){ let h = 2166136261; for (const c of String(seed)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return () => { h = Math.imul(h ^ (h >>> 15), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296; }; }
+
+/* ---------- Desenho dos espaços ---------- */
+function drawSpace(s, T){
+  const fills = T.fills;
+  const lw = 1.6 / K * 1.4;
+  ctx.save();
+  pathShape(s);
+  if (fills) { ctx.fillStyle = fills[s.kind] || fills.building; ctx.fill(); }
+  ctx.save(); pathShape(s); ctx.clip();
+  drawMarkings(s, T, lw);
+  ctx.restore();
+  pathShape(s);
+  ctx.lineWidth = (s.kind === 'building' || s.kind === 'hex') ? lw*2 : lw*1.3;
+  ctx.strokeStyle = T.stroke;
+  if (s.kind === 'paving' || s.kind === 'parking') { ctx.setLineDash([6/K*2, 5/K*2]); ctx.strokeStyle = T.mark; }
+  if (s.kind === 'road') { ctx.strokeStyle = T.mark; }
+  ctx.stroke(); ctx.setLineDash([]);
+  ctx.restore();
+}
+function drawMarkings(s, T, lw){
+  const b = bbox(s);
+  ctx.strokeStyle = T.mark; ctx.lineWidth = lw;
+  const r = rng(s.id);
+  switch (s.kind){
+    case 'building': {
+      const i = Math.min(8, Math.min(b.w, b.h)*0.12);
+      ctx.globalAlpha = .55; ctx.strokeRect(b.x+i, b.y+i, b.w-2*i, b.h-2*i); ctx.globalAlpha = 1;
+      break;
+    }
+    case 'hex': {
+      ctx.beginPath(); hexPts(s).forEach(p => { ctx.moveTo(s.cx, s.cy); ctx.lineTo(p[0], p[1]); }); ctx.stroke();
+      const inner = {kind:'hex', cx:s.cx, cy:s.cy, r:s.r*0.13};
+      pathShape(inner); ctx.fillStyle = T.fills ? T.stroke : 'transparent'; ctx.globalAlpha = .35; ctx.fill(); ctx.globalAlpha = 1; ctx.stroke();
+      break;
+    }
+    case 'court': {
+      const horiz = b.w >= b.h, i = Math.min(b.w, b.h)*0.08;
+      if (T === THEMES.colorido){
+        const st = Math.min(b.w,b.h)*0.07, cols = ['#d9473f','#f0c24a','#e98a2f'];
+        cols.forEach((c, k) => { ctx.fillStyle = c; ctx.fillRect(b.x, b.y + b.h - st*(k+1), b.w, st); ctx.fillRect(b.x + st*k, b.y, st, b.h); });
+      }
+      ctx.lineWidth = lw*1.3;
+      ctx.strokeRect(b.x+i, b.y+i, b.w-2*i, b.h-2*i);
+      ctx.beginPath();
+      if (horiz){ ctx.moveTo(b.x+b.w/2, b.y+i); ctx.lineTo(b.x+b.w/2, b.y+b.h-i); }
+      else { ctx.moveTo(b.x+i, b.y+b.h/2); ctx.lineTo(b.x+b.w-i, b.y+b.h/2); }
+      ctx.stroke();
+      const cr = Math.min(b.w, b.h)*0.13;
+      ctx.beginPath(); ctx.arc(b.x+b.w/2, b.y+b.h/2, cr, 0, Math.PI*2); ctx.stroke();
+      const kr = Math.min(b.w, b.h)*0.22;
+      ctx.beginPath();
+      if (horiz){ ctx.arc(b.x+i, b.y+b.h/2, kr, -Math.PI/2, Math.PI/2); ctx.moveTo(b.x+b.w-i, b.y+b.h/2-kr); ctx.arc(b.x+b.w-i, b.y+b.h/2, kr, -Math.PI/2, Math.PI/2, true); }
+      else { ctx.arc(b.x+b.w/2, b.y+i, kr, 0, Math.PI); ctx.moveTo(b.x+b.w/2+kr, b.y+b.h-i); ctx.arc(b.x+b.w/2, b.y+b.h-i, kr, 0, Math.PI, true); }
+      ctx.stroke();
+      break;
+    }
+    case 'field': {
+      const horiz = b.w > b.h, n = 8;
+      if (T.fills){
+        ctx.fillStyle = 'rgba(255,255,255,.05)';
+        for (let k = 0; k < n; k += 2){
+          if (horiz) ctx.fillRect(b.x + b.w/n*k, b.y, b.w/n, b.h); else ctx.fillRect(b.x, b.y + b.h/n*k, b.w, b.h/n);
+        }
+      }
+      const i = Math.min(b.w, b.h)*0.06; ctx.lineWidth = lw*1.3;
+      ctx.strokeRect(b.x+i, b.y+i, b.w-2*i, b.h-2*i);
+      ctx.beginPath();
+      if (horiz){ ctx.moveTo(b.x+b.w/2, b.y+i); ctx.lineTo(b.x+b.w/2, b.y+b.h-i); } else { ctx.moveTo(b.x+i, b.y+b.h/2); ctx.lineTo(b.x+b.w-i, b.y+b.h/2); }
+      ctx.stroke();
+      ctx.beginPath(); ctx.arc(b.x+b.w/2, b.y+b.h/2, Math.min(b.w,b.h)*0.16, 0, Math.PI*2); ctx.stroke();
+      const gw = (horiz ? b.h : b.w)*0.44, gd = (horiz ? b.w : b.h)*0.13;
+      if (horiz){ ctx.strokeRect(b.x+i, b.y+b.h/2-gw/2, gd, gw); ctx.strokeRect(b.x+b.w-i-gd, b.y+b.h/2-gw/2, gd, gw); }
+      else { ctx.strokeRect(b.x+b.w/2-gw/2, b.y+i, gw, gd); ctx.strokeRect(b.x+b.w/2-gw/2, b.y+b.h-i-gd, gw, gd); }
+      break;
+    }
+    case 'covered': {
+      ctx.globalAlpha = .35; ctx.beginPath();
+      const step = 14;
+      for (let d = -b.h; d < b.w; d += step){ ctx.moveTo(b.x + d, b.y + b.h); ctx.lineTo(b.x + d + b.h, b.y); }
+      ctx.stroke(); ctx.globalAlpha = 1;
+      break;
+    }
+    case 'play': {
+      const cols = ['#ff6b6b','#ffd166','#06d6a0','#4cc9f0','#f7a1ff'];
+      const n = Math.max(6, Math.floor(b.w*b.h/900));
+      for (let k = 0; k < n; k++){
+        const x = b.x + 8 + r()*(b.w-16), y = b.y + 8 + r()*(b.h-16), rr = 3 + r()*4;
+        ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI*2);
+        if (T.fills){ ctx.fillStyle = cols[k % cols.length]; ctx.globalAlpha = T === THEMES.planta ? .5 : .85; ctx.fill(); ctx.globalAlpha = 1; } else ctx.stroke();
+      }
+      // amarelinha
+      const sq = Math.min(b.w, b.h)*0.14, x0 = b.x + b.w*0.5 - sq/2;
+      ctx.lineWidth = lw*1.2;
+      for (let k = 0; k < 5; k++){
+        const y = b.y + b.h - 10 - sq*(k+1);
+        if (y < b.y + 4) break;
+        if (k % 2 === 1){ ctx.strokeRect(x0 - sq/2, y, sq, sq); ctx.strokeRect(x0 + sq/2, y, sq, sq); }
+        else ctx.strokeRect(x0, y, sq, sq);
+      }
+      break;
+    }
+    case 'playground': {
+      const items = Math.max(3, Math.floor(b.w*b.h/1800));
+      for (let k = 0; k < items; k++){
+        const x = b.x + 10 + r()*(b.w-20), y = b.y + 10 + r()*(b.h-20), rr = 5 + r()*6;
+        ctx.beginPath();
+        if (k % 3 === 0){ ctx.rect(x-rr, y-rr*0.4, rr*2, rr*0.8); }
+        else if (k % 3 === 1){ ctx.arc(x, y, rr, 0, Math.PI*2); }
+        else { ctx.moveTo(x, y-rr); ctx.lineTo(x+rr, y+rr); ctx.lineTo(x-rr, y+rr); ctx.closePath(); }
+        ctx.lineWidth = lw*1.2; ctx.stroke();
+      }
+      break;
+    }
+    case 'garden': {
+      ctx.fillStyle = T.mark; ctx.globalAlpha = .4;
+      const n = Math.floor(b.w*b.h/260);
+      for (let k = 0; k < n; k++){ ctx.beginPath(); ctx.arc(b.x + r()*b.w, b.y + r()*b.h, 1.1, 0, Math.PI*2); ctx.fill(); }
+      ctx.globalAlpha = 1;
+      // caminho sinuoso
+      ctx.lineWidth = lw*1.2; ctx.setLineDash([4, 4]); ctx.beginPath();
+      ctx.moveTo(b.x + b.w*0.1, b.y); ctx.bezierCurveTo(b.x + b.w*0.6, b.y + b.h*0.3, b.x, b.y + b.h*0.6, b.x + b.w*0.55, b.y + b.h);
+      ctx.stroke(); ctx.setLineDash([]);
+      break;
+    }
+    case 'parking': {
+      const horiz = b.w > b.h, slot = 2.6*M*2;
+      ctx.beginPath();
+      if (horiz){ for (let x = b.x + slot; x < b.x + b.w; x += slot){ ctx.moveTo(x, b.y); ctx.lineTo(x, b.y + b.h*0.38); ctx.moveTo(x, b.y + b.h); ctx.lineTo(x, b.y + b.h*0.62); } }
+      else { for (let y = b.y + slot; y < b.y + b.h; y += slot){ ctx.moveTo(b.x, y); ctx.lineTo(b.x + b.w*0.38, y); ctx.moveTo(b.x + b.w, y); ctx.lineTo(b.x + b.w*0.62, y); } }
+      ctx.stroke();
+      break;
+    }
+    case 'road': {
+      ctx.setLineDash([12, 10]); ctx.lineWidth = lw*1.5; ctx.beginPath();
+      if (b.w > b.h){ ctx.moveTo(b.x, b.y + b.h/2); ctx.lineTo(b.x + b.w, b.y + b.h/2); } else { ctx.moveTo(b.x + b.w/2, b.y); ctx.lineTo(b.x + b.w/2, b.y + b.h); }
+      ctx.stroke(); ctx.setLineDash([]);
+      break;
+    }
+  }
+}
+function drawTree(t, T){
+  const [x, y, rr] = t;
+  const r = rng('t' + x + ',' + y);
+  ctx.beginPath();
+  const lobes = 7;
+  for (let k = 0; k <= lobes; k++){
+    const a = k/lobes*Math.PI*2, rad = rr*(0.82 + r()*0.22);
+    const px = x + Math.cos(a)*rad, py = y + Math.sin(a)*rad;
+    if (k === 0) ctx.moveTo(px, py); else ctx.quadraticCurveTo(x + Math.cos(a - Math.PI/lobes)*rr*1.12, y + Math.sin(a - Math.PI/lobes)*rr*1.12, px, py);
+  }
+  if (T.tree){ ctx.fillStyle = T.tree; ctx.fill(); }
+  ctx.strokeStyle = T.treeEdge; ctx.lineWidth = 1.4/K*1.4; ctx.stroke();
+  if (T.tree){ ctx.beginPath(); ctx.arc(x - rr*0.25, y - rr*0.25, rr*0.35, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fill(); }
+}
+
+/* ---------- Grade de caminhada (A*) ---------- */
+const CELL = 8;
+const GX = WORLD.x, GY = WORLD.y;
+const COLS = Math.ceil(WORLD.w / CELL), ROWS = Math.ceil(WORLD.h / CELL);
+let blocked = new Uint8Array(COLS*ROWS), reach = new Uint8Array(COLS*ROWS);
+let reachList = [], zoneCells = {}, doorCells = {};
+const cellIdx = (c, r) => r*COLS + c;
+const cellOf = (x, y) => ({c: Math.max(0, Math.min(COLS-1, Math.floor((x - GX)/CELL))), r: Math.max(0, Math.min(ROWS-1, Math.floor((y - GY)/CELL)))});
+const cellCenter = i => ({x: GX + (i % COLS)*CELL + CELL/2, y: GY + Math.floor(i / COLS)*CELL + CELL/2});
+
+function rebuildGrid(){
+  blocked.fill(0);
+  const blockers = spaces.filter(s => KINDS[s.kind] && KINDS[s.kind].block);
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++){
+    const x = GX + c*CELL + CELL/2, y = GY + r*CELL + CELL/2;
+    if (y < -14 || x < 40){ blocked[cellIdx(c, r)] = 1; continue; } // fora do terreno (além da rua)
+    for (const s of blockers){ if (contains(s, x, y, 3)) { blocked[cellIdx(c, r)] = 1; break; } }
+  }
+  // maior região conectada
+  reach.fill(0);
+  const comp = new Int32Array(COLS*ROWS).fill(-1);
+  let best = -1, bestSize = 0, id = 0;
+  const q = new Int32Array(COLS*ROWS);
+  for (let i = 0; i < COLS*ROWS; i++){
+    if (blocked[i] || comp[i] >= 0) continue;
+    let h = 0, t = 0; q[t++] = i; comp[i] = id; let size = 0;
+    while (h < t){
+      const cur = q[h++]; size++;
+      const c = cur % COLS, r = (cur / COLS) | 0;
+      if (c > 0 && !blocked[cur-1] && comp[cur-1] < 0){ comp[cur-1] = id; q[t++] = cur-1; }
+      if (c < COLS-1 && !blocked[cur+1] && comp[cur+1] < 0){ comp[cur+1] = id; q[t++] = cur+1; }
+      if (r > 0 && !blocked[cur-COLS] && comp[cur-COLS] < 0){ comp[cur-COLS] = id; q[t++] = cur-COLS; }
+      if (r < ROWS-1 && !blocked[cur+COLS] && comp[cur+COLS] < 0){ comp[cur+COLS] = id; q[t++] = cur+COLS; }
+    }
+    if (size > bestSize){ bestSize = size; best = id; }
+    id++;
+  }
+  reachList = [];
+  for (let i = 0; i < COLS*ROWS; i++) if (comp[i] === best){ reach[i] = 1; reachList.push(i); }
+  // células por zona e portas por prédio
+  zoneCells = {}; doorCells = {};
+  for (const s of spaces){
+    const k = KINDS[s.kind]; if (!k) continue;
+    const b = bbox(s);
+    const c0 = cellOf(b.x - 14, b.y - 14), c1 = cellOf(b.x + b.w + 14, b.y + b.h + 14);
+    const inside = [], door = [];
+    for (let r = c0.r; r <= c1.r; r++) for (let c = c0.c; c <= c1.c; c++){
+      const i = cellIdx(c, r); if (!reach[i]) continue;
+      const p = cellCenter(i);
+      if (k.zone && contains(s, p.x, p.y, -2)) inside.push(i);
+      if (k.block && s.kind !== 'road' && contains(s, p.x, p.y, 12)) door.push(i);
+    }
+    if (inside.length) zoneCells[s.id] = inside;
+    if (door.length) doorCells[s.id] = door;
+  }
+}
+function nearestReach(x, y){
+  const {c, r} = cellOf(x, y);
+  for (let rad = 0; rad < 40; rad++){
+    for (let dr = -rad; dr <= rad; dr++) for (let dc = -rad; dc <= rad; dc++){
+      if (Math.max(Math.abs(dr), Math.abs(dc)) !== rad) continue;
+      const cc = c + dc, rr = r + dr;
+      if (cc < 0 || rr < 0 || cc >= COLS || rr >= ROWS) continue;
+      const i = cellIdx(cc, rr); if (reach[i]) return i;
+    }
+  }
+  return reachList.length ? reachList[0] : -1;
+}
+// heap
+function aStar(start, goal){
+  if (start < 0 || goal < 0) return null;
+  if (start === goal) return [goal];
+  const N = COLS*ROWS;
+  const g = new Float32Array(N).fill(Infinity), from = new Int32Array(N).fill(-1), closed = new Uint8Array(N);
+  const heap = [], hf = [];
+  const gc = goal % COLS, gr = (goal / COLS) | 0;
+  const hfun = i => { const dx = Math.abs(i % COLS - gc), dy = Math.abs(((i / COLS) | 0) - gr); return (dx + dy) + (1.414 - 2)*Math.min(dx, dy); };
+  const push = (i, f) => { heap.push(i); hf.push(f); let k = heap.length - 1; while (k > 0){ const p = (k - 1) >> 1; if (hf[p] <= hf[k]) break; [heap[p], heap[k]] = [heap[k], heap[p]]; [hf[p], hf[k]] = [hf[k], hf[p]]; k = p; } };
+  const pop = () => { const top = heap[0]; const li = heap.pop(), lf = hf.pop(); if (heap.length){ heap[0] = li; hf[0] = lf; let k = 0; for(;;){ const a = 2*k+1, b = a+1; let m = k; if (a < heap.length && hf[a] < hf[m]) m = a; if (b < heap.length && hf[b] < hf[m]) m = b; if (m === k) break; [heap[m], heap[k]] = [heap[k], heap[m]]; [hf[m], hf[k]] = [hf[k], hf[m]]; k = m; } } return top; };
+  g[start] = 0; push(start, hfun(start));
+  let iter = 0;
+  while (heap.length && iter++ < 20000){
+    const cur = pop(); if (closed[cur]) continue; closed[cur] = 1;
+    if (cur === goal) break;
+    const c = cur % COLS, r = (cur / COLS) | 0;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++){
+      if (!dr && !dc) continue;
+      const nc = c + dc, nr = r + dr;
+      if (nc < 0 || nr < 0 || nc >= COLS || nr >= ROWS) continue;
+      const ni = cellIdx(nc, nr);
+      if (!reach[ni] || closed[ni]) continue;
+      if (dr && dc && (!reach[cellIdx(c + dc, r)] || !reach[cellIdx(c, r + dr)])) continue;
+      const ng = g[cur] + (dr && dc ? 1.414 : 1);
+      if (ng < g[ni]){ g[ni] = ng; from[ni] = cur; push(ni, ng + hfun(ni)); }
+    }
+  }
+  if (from[goal] < 0) return null;
+  const out = []; let k = goal; while (k !== start && k >= 0){ out.push(k); k = from[k]; }
+  return out.reverse();
+}
+function lineClear(a, b){
+  const d = Math.hypot(b.x - a.x, b.y - a.y), n = Math.ceil(d / (CELL*0.5));
+  for (let k = 1; k < n; k++){
+    const x = a.x + (b.x - a.x)*k/n, y = a.y + (b.y - a.y)*k/n;
+    const {c, r} = cellOf(x, y); if (!reach[cellIdx(c, r)]) return false;
+  }
+  return true;
+}
+function smoothPath(startPt, cells, jit){
+  const pts = cells.map(i => { const p = cellCenter(i); return {x: p.x + (Math.random() - .5)*jit, y: p.y + (Math.random() - .5)*jit}; });
+  const out = []; let cur = startPt, i = 0;
+  while (i < pts.length){
+    let j = pts.length - 1;
+    while (j > i && !lineClear(cur, pts[j])) j--;
+    out.push(pts[j]); cur = pts[j]; i = j + 1;
+  }
+  return out;
+}
+
+/* ---------- Alunos ---------- */
+const SKIN = ['#f1c9a5','#e0ac7e','#c68a5e','#9a6440','#704429','#f6d7bd'];
+const HAIR = ['#1c120c','#2b1a10','#4a2c16','#7a4a1e','#b98a46','#0f0b08','#5b3a29'];
+const SHIRTS = ['#ff595e','#ffca3a','#8ac926','#1982c4','#6a4c93','#ff924c','#f15bb5','#00bbf9','#00f5d4'];
+const BAGS = ['#e63946','#1d3557','#2a9d8f','#f4a261','#8338ec','#ff006e'];
+let kids = [];
+let paused = false, placing = false;
+
+class Kid{
+  constructor(x, y){
+    this.x = x; this.y = y; this.dir = Math.random()*Math.PI*2;
+    this.phase = Math.random()*10; this.path = []; this.state = 'idle'; this.timer = Math.random()*1.5;
+    this.skin = SKIN[(Math.random()*SKIN.length)|0]; this.hair = HAIR[(Math.random()*HAIR.length)|0];
+    this.shirt = SHIRTS[(Math.random()*SHIRTS.length)|0]; this.bag = Math.random() < .55 ? BAGS[(Math.random()*BAGS.length)|0] : null;
+    this.long = Math.random() < .45; this.pace = 0.85 + Math.random()*0.35;
+    this.alpha = 0; this.goal = null; this.zone = null; this.playT = 0; this.moving = false;
+  }
+}
+function addKid(x, y){
+  if (kids.length >= 300) { toast('Limite de 300 alunos'); return; }
+  let i;
+  if (x === undefined){
+    const ent = spaces.find(s => s.id === 'entrada');
+    if (ent && zoneOrRect(ent).length) { const cells = zoneOrRect(ent); i = cells[(Math.random()*cells.length)|0]; }
+    else i = reachList[(Math.random()*reachList.length)|0];
+  } else i = nearestReach(x, y);
+  if (i == null || i < 0) return;
+  const p = cellCenter(i);
+  const k = new Kid(p.x + (Math.random() - .5)*4, p.y + (Math.random() - .5)*4);
+  kids.push(k); updateCount();
+}
+function zoneOrRect(s){
+  if (zoneCells[s.id]) return zoneCells[s.id];
+  const b = bbox(s), out = [];
+  const c0 = cellOf(b.x, b.y), c1 = cellOf(b.x + b.w, b.y + b.h);
+  for (let r = c0.r; r <= c1.r; r++) for (let c = c0.c; c <= c1.c; c++){ const i = cellIdx(c, r); if (reach[i]) out.push(i); }
+  return out;
+}
+const pick = a => a[(Math.random()*a.length)|0];
+function planFor(k){
+  const start = nearestReach(k.x, k.y);
+  let goal = -1; k.goal = null;
+  const playIds = Object.keys(zoneCells).filter(id => { const s = spaces.find(q => q.id === id); return s && KINDS[s.kind].play; });
+  const allZoneIds = Object.keys(zoneCells);
+  if (S.mode === 'aula'){
+    const ids = Object.keys(doorCells).filter(id => { const s = spaces.find(q => q.id === id); return s && (s.kind === 'building' || s.kind === 'hex'); });
+    if (ids.length){ const id = pick(ids); goal = pick(doorCells[id]); k.goal = {type:'enter', id}; }
+  } else if (k.zone && k.playT > 0 && zoneCells[k.zone]){
+    const cells = zoneCells[k.zone];
+    for (let t = 0; t < 8; t++){ const c = pick(cells), p = cellCenter(c); if (Math.hypot(p.x - k.x, p.y - k.y) < 90){ goal = c; break; } }
+    if (goal < 0) goal = pick(cells);
+    k.goal = {type:'play', id:k.zone};
+  } else if (S.mode === 'recreio' && playIds.length){
+    const id = pick(playIds); goal = pick(zoneCells[id]); k.goal = {type:'zone', id};
+  } else if (Math.random() < .55 && allZoneIds.length){
+    const id = pick(allZoneIds); goal = pick(zoneCells[id]); k.goal = {type:'zone', id};
+  } else if (reachList.length){
+    goal = pick(reachList); k.goal = {type:'wander'};
+  }
+  const cells = aStar(start, goal);
+  if (!cells){ k.path = []; k.state = 'idle'; k.timer = .5 + Math.random(); return; }
+  k.path = smoothPath({x:k.x, y:k.y}, cells, 5);
+  k.state = 'walk';
+}
+function stepKids(dt){
+  const base = 26 * S.kidSpeed;
+  let budget = 6; // replanejamentos por quadro
+  for (const k of kids){
+    if (k.state === 'inside'){
+      if (S.mode !== 'aula'){
+        const doors = doorCells[k.inside];
+        const c = doors ? pick(doors) : pick(reachList);
+        const p = cellCenter(c); k.x = p.x; k.y = p.y; k.state = 'idle'; k.timer = Math.random()*1.2; k.inside = null;
+      } else continue;
+    }
+    // aparecer/sumir
+    const targetA = (k.state === 'entering') ? 0 : 1;
+    k.alpha += (targetA - k.alpha) * Math.min(1, dt*4);
+    if (k.state === 'entering'){ if (k.alpha < .04){ k.state = 'inside'; k.alpha = 0; } continue; }
+
+    if (k.state === 'walk' && k.path.length){
+      const run = (S.mode === 'recreio' || (k.goal && k.goal.type === 'play')) ? 1.7 : 1;
+      const sp = base * k.pace * run;
+      const t = k.path[0];
+      const dx = t.x - k.x, dy = t.y - k.y, d = Math.hypot(dx, dy);
+      const mv = sp*dt;
+      if (d <= mv){ k.x = t.x; k.y = t.y; k.path.shift(); }
+      else { k.x += dx/d*mv; k.y += dy/d*mv; }
+      const want = Math.atan2(dy, dx);
+      let da = want - k.dir; da = Math.atan2(Math.sin(da), Math.cos(da));
+      k.dir += da * Math.min(1, dt*8);
+      k.phase += mv * 0.32 * (14 / Math.max(6, S.kidSize));
+      k.moving = true;
+      if (!k.path.length){
+        k.moving = false;
+        const g = k.goal;
+        if (g && g.type === 'enter' && S.mode === 'aula'){ k.state = 'entering'; k.inside = g.id; }
+        else if (g && g.type === 'zone' && KINDS[(spaces.find(s => s.id === g.id) || {}).kind || 'paving'].play){
+          k.zone = g.id; k.playT = 6 + Math.random()*10; k.state = 'idle'; k.timer = Math.random()*0.8;
+        } else { k.state = 'idle'; k.timer = (g && g.type === 'play') ? Math.random()*0.8 : 1 + Math.random()*4; }
+      }
+    } else {
+      k.moving = false;
+      k.timer -= dt;
+      if (k.playT > 0) k.playT -= dt; else k.zone = null;
+      if (k.state === 'walk') k.state = 'idle';
+      if (k.timer <= 0 && budget > 0){ budget--; planFor(k); }
+    }
+  }
+}
+function drawKid(k, T){
+  if (k.alpha < .02) return;
+  const s = S.kidSize;
+  const stride = k.moving ? Math.sin(k.phase) : 0;
+  ctx.save();
+  ctx.globalAlpha = k.alpha;
+  ctx.translate(k.x, k.y);
+  ctx.rotate(k.dir);
+  // sombra
+  ctx.fillStyle = 'rgba(0,0,0,.28)';
+  ctx.beginPath(); ctx.ellipse(s*0.08, s*0.1, s*0.32, s*0.42, 0, 0, Math.PI*2); ctx.fill();
+  const uni = S.outfit === 'uniforme';
+  const shirt = uni ? '#f4f7fb' : k.shirt, pants = uni ? '#1f4fa3' : '#2c3e66';
+  // pernas / pés
+  ctx.fillStyle = '#222';
+  const fx = stride * s*0.26;
+  ctx.beginPath(); ctx.ellipse(fx, -s*0.13, s*0.11, s*0.075, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-fx, s*0.13, s*0.11, s*0.075, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = pants;
+  ctx.beginPath(); ctx.ellipse(fx*0.45, -s*0.11, s*0.1, s*0.08, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-fx*0.45, s*0.11, s*0.1, s*0.08, 0, 0, Math.PI*2); ctx.fill();
+  // braços
+  const ax = -stride * s*0.2;
+  ctx.fillStyle = shirt;
+  ctx.beginPath(); ctx.ellipse(ax*0.6, -s*0.33, s*0.12, s*0.075, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-ax*0.6, s*0.33, s*0.12, s*0.075, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = k.skin;
+  ctx.beginPath(); ctx.arc(ax, -s*0.34, s*0.065, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(-ax, s*0.34, s*0.065, 0, Math.PI*2); ctx.fill();
+  // tronco (ombros)
+  ctx.fillStyle = shirt;
+  ctx.beginPath(); ctx.ellipse(0, 0, s*0.19, s*0.33, 0, 0, Math.PI*2); ctx.fill();
+  if (uni){ ctx.fillStyle = '#1f4fa3'; ctx.beginPath(); ctx.ellipse(0, 0, s*0.19, s*0.33, 0, -0.35, 0.35); ctx.lineTo(0,0); ctx.fill(); }
+  ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = s*0.03; ctx.beginPath(); ctx.ellipse(0, 0, s*0.19, s*0.33, 0, 0, Math.PI*2); ctx.stroke();
+  // mochila
+  if (k.bag){ ctx.fillStyle = k.bag; roundRect(-s*0.36, -s*0.2, s*0.17, s*0.4, s*0.05); ctx.fill(); }
+  // cabeça vista de cima
+  ctx.fillStyle = k.skin;
+  ctx.beginPath(); ctx.arc(s*0.04, 0, s*0.17, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = k.hair;
+  ctx.beginPath(); ctx.arc(-s*0.01, 0, s*0.165, 0, Math.PI*2); ctx.fill();
+  if (k.long){ ctx.beginPath(); ctx.ellipse(-s*0.15, 0, s*0.1, s*0.13, 0, 0, Math.PI*2); ctx.fill(); }
+  ctx.fillStyle = 'rgba(255,255,255,.18)';
+  ctx.beginPath(); ctx.arc(-s*0.03, -s*0.05, s*0.06, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+function roundRect(x, y, w, h, r){ ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+/* ---------- Rótulos (sempre de pé na tela) ---------- */
+function drawLabels(T){
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const s of spaces){
+    if (s.show === false || !s.name) continue;
+    const b = bbox(s);
+    const corners = [[b.x, b.y], [b.x + b.w, b.y], [b.x, b.y + b.h], [b.x + b.w, b.y + b.h]].map(p => toScreen(p[0], p[1]));
+    const xs = corners.map(p => p.x);
+    const sw = Math.max(...xs) - Math.min(...xs);
+    let anchor = center(s);
+    const idx = spaces.indexOf(s);
+    if (spaces.some((o, j) => j > idx && o.show !== false && contains(o, anchor.x, anchor.y))){
+      anchor = {x: anchor.x, y: b.y + Math.min(22, b.h*0.12)}; // nome na faixa de cima quando há outro espaço dentro
+    }
+    const c = toScreen(anchor.x, anchor.y);
+    const fs = Math.max(9, S.labelSize * (s.labelScale || 1) * K);
+    ctx.font = `700 ${fs}px Lexend, "Atkinson Hyperlegible", system-ui, sans-serif`;
+    const lines = wrap(s.name, Math.max(sw*0.92, fs*3));
+    const lh = fs*1.08;
+    const y0 = c.y - (lines.length - 1)*lh/2;
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(3, fs*0.26);
+    ctx.strokeStyle = T.outline;
+    lines.forEach((l, i) => ctx.strokeText(l, c.x, y0 + i*lh));
+    ctx.fillStyle = T.label;
+    lines.forEach((l, i) => ctx.fillText(l, c.x, y0 + i*lh));
+  }
+}
+function wrap(text, maxW){
+  const words = text.split(/\s+/); const lines = []; let cur = '';
+  for (const w of words){
+    const t = cur ? cur + ' ' + w : w;
+    if (ctx.measureText(t).width > maxW && cur){ lines.push(cur); cur = w; } else cur = t;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+/* ---------- Laço de desenho ---------- */
+let selected = null, editMode = false, highlight = null;
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(0.05, (now - last)/1000); last = now;
+  if (!paused) stepKids(dt);
+  computeMatrix();
+  const T = THEMES[S.theme] || THEMES.planta;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = T.bg; ctx.fillRect(0, 0, cv.width, cv.height);
+  const base = new DOMMatrix().scaleSelf(DPR, DPR).multiplySelf(Mx);
+  ctx.setTransform(base);
+
+  if (S.showGrid){
+    const step = 5*M;
+    ctx.lineWidth = 1/K;
+    for (let x = Math.floor(WORLD.x/step)*step; x <= WORLD.x + WORLD.w; x += step){
+      ctx.strokeStyle = (Math.round(x/step) % 5 === 0) ? T.gridMajor : T.grid;
+      ctx.beginPath(); ctx.moveTo(x, WORLD.y); ctx.lineTo(x, WORLD.y + WORLD.h); ctx.stroke();
+    }
+    for (let y = Math.floor(WORLD.y/step)*step; y <= WORLD.y + WORLD.h; y += step){
+      ctx.strokeStyle = (Math.round(y/step) % 5 === 0) ? T.gridMajor : T.grid;
+      ctx.beginPath(); ctx.moveTo(WORLD.x, y); ctx.lineTo(WORLD.x + WORLD.w, y); ctx.stroke();
+    }
+  }
+  for (const s of spaces) drawSpace(s, T);
+
+  if (highlight){
+    const s = spaces.find(q => q.id === highlight.id);
+    const t = (now - highlight.t0)/1000;
+    if (!s || t > 4) highlight = null;
+    else {
+      const a = 0.5 + 0.5*Math.sin(t*6);
+      ctx.save(); pathShape(s);
+      ctx.fillStyle = T.glow; ctx.globalAlpha = 0.18 + 0.22*a; ctx.fill();
+      ctx.globalAlpha = 1; ctx.lineWidth = (4 + 4*a)/K; ctx.strokeStyle = T.glow; ctx.stroke(); ctx.restore();
+    }
+  }
+  for (const k of kids) drawKid(k, T);
+  if (S.showTrees) for (const t of trees) drawTree(t, T);
+
+  if (editMode && selected){
+    const s = spaces.find(q => q.id === selected);
+    if (s){
+      ctx.save(); pathShape(s); ctx.setLineDash([8/K, 6/K]); ctx.lineWidth = 3/K; ctx.strokeStyle = T.sel; ctx.stroke(); ctx.setLineDash([]);
+      const h = handlePos(s); const hs = 9/K;
+      ctx.fillStyle = T.sel; ctx.fillRect(h.x - hs, h.y - hs, hs*2, hs*2);
+      ctx.strokeStyle = T.bg; ctx.lineWidth = 2/K; ctx.strokeRect(h.x - hs, h.y - hs, hs*2, hs*2);
+      ctx.restore();
+    }
+  }
+  if (S.showLabels) drawLabels(T); else ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (S.showScale) drawScale(T);
+  requestAnimationFrame(frame);
+}
+function drawScale(T){
+  const meters = 10, len = meters*M*K;
+  const x = (document.body.classList.contains('projecting') ? 24 : W - 24 - len - (W > 520 ? 230 : 0));
+  const y = H - 28;
+  const bx = Math.max(panelOffset() + 20, x);
+  ctx.strokeStyle = T.label; ctx.fillStyle = T.label; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(bx, y - 6); ctx.lineTo(bx, y); ctx.lineTo(bx + len, y); ctx.lineTo(bx + len, y - 6); ctx.stroke();
+  ctx.font = '700 12px "Atkinson Hyperlegible", system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  ctx.fillText('≈ 10 m', bx + len/2, y - 4);
+}
+function handlePos(s){ return s.kind === 'hex' ? {x: s.cx + s.r, y: s.cy} : {x: s.x + s.w, y: s.y + s.h}; }
+
+/* ---------- Ponteiro: arrastar, zoom, selecionar ---------- */
+const pointers = new Map();
+let drag = null, pinch = null;
+function hitSpace(wx, wy){
+  for (let i = spaces.length - 1; i >= 0; i--){
+    const s = spaces[i];
+    if (!editMode && (s.kind === 'road')) continue;
+    if (contains(s, wx, wy)) return s;
+  }
+  return null;
+}
+cv.addEventListener('pointerdown', e => {
+  cv.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if (pointers.size === 2){
+    const [a, b] = [...pointers.values()];
+    pinch = {d: Math.hypot(a.x - b.x, a.y - b.y), zoom: view.zoom, mx:(a.x+b.x)/2, my:(a.y+b.y)/2, panX:view.panX, panY:view.panY};
+    drag = null; return;
+  }
+  const w = toWorld(e.clientX, e.clientY);
+  if (placing){ addKid(w.x, w.y); save(); return; }
+  if (editMode){
+    const sel = selected && spaces.find(q => q.id === selected);
+    if (sel){
+      const h = toScreen(handlePos(sel).x, handlePos(sel).y);
+      if (Math.hypot(h.x - e.clientX, h.y - e.clientY) < 16){ drag = {type:'resize', s:sel}; return; }
+    }
+    const s = hitSpace(w.x, w.y);
+    if (s){
+      select(s.id);
+      drag = {type:'move', s, start:w, orig: s.kind === 'hex' ? {x:s.cx, y:s.cy} : {x:s.x, y:s.y}};
+      return;
+    }
+    select(null);
+  }
+  drag = {type:'pan', sx:e.clientX, sy:e.clientY, px:view.panX, py:view.panY, moved:false, w};
+  cv.classList.add('dragging');
+});
+cv.addEventListener('pointermove', e => {
+  wake();
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if (pinch && pointers.size === 2){
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    view.zoom = Math.max(0.3, Math.min(8, pinch.zoom * d / pinch.d));
+    view.panX = pinch.panX + ((a.x+b.x)/2 - pinch.mx); view.panY = pinch.panY + ((a.y+b.y)/2 - pinch.my);
+    return;
+  }
+  if (!drag) return;
+  if (drag.type === 'pan'){
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (Math.hypot(dx, dy) > 4) drag.moved = true;
+    view.panX = drag.px + dx; view.panY = drag.py + dy;
+  } else {
+    const w = toWorld(e.clientX, e.clientY);
+    const s = drag.s;
+    if (drag.type === 'move'){
+      const nx = Math.round(drag.orig.x + w.x - drag.start.x), ny = Math.round(drag.orig.y + w.y - drag.start.y);
+      if (s.kind === 'hex'){ s.cx = nx; s.cy = ny; } else { s.x = nx; s.y = ny; }
+    } else {
+      if (s.kind === 'hex') s.r = Math.max(14, Math.round(Math.hypot(w.x - s.cx, w.y - s.cy)));
+      else { s.w = Math.max(12, Math.round(w.x - s.x)); s.h = Math.max(12, Math.round(w.y - s.y)); }
+    }
+    drag.changed = true;
+  }
+});
+function endPointer(e){
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch = null;
+  if (!drag) return;
+  if (drag.type === 'pan' && !drag.moved && !editMode && !placing){
+    const s = hitSpace(drag.w.x, drag.w.y);
+    if (s) highlight = {id:s.id, t0:performance.now()};
+  }
+  if (drag.changed){ rebuildGrid(); save(); renderEditor(); }
+  drag = null; cv.classList.remove('dragging');
+}
+cv.addEventListener('pointerup', endPointer);
+cv.addEventListener('pointercancel', endPointer);
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  const f = Math.exp(-e.deltaY * 0.0015);
+  const nz = Math.max(0.3, Math.min(8, view.zoom * f));
+  const real = nz / view.zoom;
+  // zoom em torno do cursor
+  const off = panelOffset();
+  const cx = off + (W - off)/2 + view.panX, cy = H/2 + view.panY;
+  view.panX += (e.clientX - cx) * (1 - real);
+  view.panY += (e.clientY - cy) * (1 - real);
+  view.zoom = nz;
+}, {passive:false});
+
+/* ---------- Interface ---------- */
+const $ = id => document.getElementById(id);
+function toast(msg){ const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 1800); }
+function fit(){ view.zoom = 1; view.panX = 0; view.panY = 0; }
+
+function syncControls(){
+  $('theme').value = S.theme;
+  $('mirror').checked = S.mirror;
+  ['showLabels','showTrees','showGrid','showScale'].forEach(k => $(k).checked = !!S[k]);
+  $('labelSize').value = S.labelSize;
+  $('kidSpeed').value = S.kidSpeed; $('kidSize').value = S.kidSize; $('outfit').value = S.outfit;
+  document.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', b.dataset.mode === S.mode));
+}
+function bindSetting(id, key, parse = v => v){
+  $(id).addEventListener('input', e => { S[key] = e.target.type === 'checkbox' ? e.target.checked : parse(e.target.value); save(); });
+}
+bindSetting('theme', 'theme'); bindSetting('mirror', 'mirror');
+['showLabels','showTrees','showGrid','showScale'].forEach(k => bindSetting(k, k));
+bindSetting('labelSize', 'labelSize', Number); bindSetting('kidSpeed', 'kidSpeed', Number); bindSetting('kidSize', 'kidSize', Number);
+bindSetting('outfit', 'outfit');
+$('rotL').onclick = () => { S.rot = (S.rot + 270) % 360; fit(); save(); };
+$('rotR').onclick = () => { S.rot = (S.rot + 90) % 360; fit(); save(); };
+$('btnFit').onclick = fit; $('qFit').onclick = fit;
+$('closePanel').onclick = () => document.body.classList.add('panel-closed');
+$('openPanel').onclick = () => document.body.classList.remove('panel-closed');
+
+let wakeLock = null;
+function setProjecting(on){
+  document.body.classList.toggle('projecting', on);
+  if (on){
+    if (editMode) setEdit(false);
+    if (placing) setPlacing(false);
+    toast('Modo projeção · tecla H volta aos controles');
+    try { navigator.wakeLock && navigator.wakeLock.request('screen').then(l => wakeLock = l).catch(() => {}); } catch(e) {}
+  } else { try { wakeLock && wakeLock.release(); } catch(e) {} wakeLock = null; }
+  wake();
+}
+$('btnProj').onclick = () => setProjecting(true);
+$('qProj').onclick = () => setProjecting(true);
+$('exitProj').onclick = () => setProjecting(false);
+$('btnFull').onclick = () => {
+  try {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else { const p = document.documentElement.requestFullscreen(); if (p && p.catch) p.catch(() => toast('Tela cheia não está disponível aqui')); }
+  } catch(e) { toast('Tela cheia não está disponível aqui'); }
+};
+let idleT = 0;
+function wake(){ document.body.classList.remove('idle'); clearTimeout(idleT); idleT = setTimeout(() => document.body.classList.add('idle'), 2200); }
+window.addEventListener('keydown', e => {
+  if (e.target.matches('input, textarea, select')) return;
+  if (e.key === 'h' || e.key === 'H') setProjecting(!document.body.classList.contains('projecting'));
+  else if (e.key === 'Escape' && document.body.classList.contains('projecting')) setProjecting(false);
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && editMode && selected){ deleteSelected(); }
+});
+
+/* Espaços */
+function setEdit(on){
+  editMode = on;
+  $('editToggle').setAttribute('aria-pressed', on);
+  if (!on) select(null);
+  if (on && placing) setPlacing(false);
+  renderEditor();
+}
+$('editToggle').onclick = () => setEdit(!editMode);
+function select(id){ selected = id; renderEditor(); markList(); }
+const kindSel = $('edKind');
+Object.entries(KINDS).forEach(([k, v]) => { if (k === 'hex') return; const o = document.createElement('option'); o.value = k; o.textContent = v.label; kindSel.appendChild(o); });
+function renderEditor(){
+  const s = editMode && selected && spaces.find(q => q.id === selected);
+  $('editor').hidden = !s;
+  $('editHint').hidden = !!s;
+  if (!s) return;
+  if (document.activeElement !== $('edName')) $('edName').value = s.name;
+  kindSel.disabled = s.kind === 'hex';
+  if (s.kind === 'hex'){ if (![...kindSel.options].some(o => o.value === 'hex')){ const o = document.createElement('option'); o.value = 'hex'; o.textContent = KINDS.hex.label; kindSel.appendChild(o); } }
+  kindSel.value = s.kind;
+  $('edLabelScale').value = s.labelScale || 1;
+  $('edShow').checked = s.show !== false;
+  armDelete(false);
+}
+$('edName').addEventListener('input', e => { const s = spaces.find(q => q.id === selected); if (!s) return; s.name = e.target.value; syncListName(s); save(); });
+kindSel.addEventListener('input', e => { const s = spaces.find(q => q.id === selected); if (!s || s.kind === 'hex') return; s.kind = e.target.value; rebuildGrid(); renderList(); save(); });
+$('edLabelScale').addEventListener('input', e => { const s = spaces.find(q => q.id === selected); if (!s) return; s.labelScale = Number(e.target.value); save(); });
+$('edShow').addEventListener('input', e => { const s = spaces.find(q => q.id === selected); if (!s) return; s.show = e.target.checked; renderList(); save(); });
+let delArmed = false;
+function armDelete(on){ delArmed = on; $('edDelete').classList.toggle('armed', on); $('edDelete').textContent = on ? 'Confirmar apagar' : 'Apagar'; }
+function deleteSelected(){
+  if (!delArmed){ armDelete(true); return; }
+  spaces = spaces.filter(q => q.id !== selected); selected = null;
+  rebuildGrid(); renderList(); renderEditor(); save(); toast('Espaço apagado');
+}
+$('edDelete').onclick = deleteSelected;
+
+function renderList(){
+  const box = $('spaceList'); box.innerHTML = '';
+  // ordem amigável: prédios primeiro
+  const order = ['hex','building','court','field','covered','play','playground','garden','parking','paving','road'];
+  const sorted = [...spaces].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+  for (const s of sorted){
+    const row = document.createElement('div'); row.className = 'item'; row.dataset.id = s.id;
+    const sw = document.createElement('span'); sw.className = 'sw'; sw.style.background = SWATCH[s.kind] || SWATCH.building;
+    const inp = document.createElement('input'); inp.type = 'text'; inp.value = s.name; inp.maxLength = 40; inp.id = 'nm-' + s.id;
+    inp.setAttribute('aria-label', 'Nome do espaço (' + (KINDS[s.kind] || {}).label + ')');
+    inp.addEventListener('focus', () => { highlight = {id:s.id, t0:performance.now()}; if (editMode) select(s.id); else { selected = s.id; markList(); } });
+    inp.addEventListener('input', () => { s.name = inp.value; if (selected === s.id && document.activeElement !== $('edName')) $('edName').value = s.name; save(); });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+    const eye = document.createElement('button'); eye.type = 'button'; eye.className = 'eye' + (s.show === false ? ' off' : '');
+    eye.textContent = s.show === false ? 'oculto' : 'visível'; eye.title = 'Mostrar ou esconder o nome no chão';
+    eye.onclick = () => { s.show = s.show === false; renderList(); renderEditor(); save(); };
+    row.append(sw, inp, eye); box.appendChild(row);
+  }
+  markList();
+}
+function syncListName(s){ const i = document.getElementById('nm-' + s.id); if (i && document.activeElement !== i) i.value = s.name; }
+function markList(){ document.querySelectorAll('.item').forEach(r => r.classList.toggle('sel', r.dataset.id === selected)); }
+$('addSpace').onclick = () => {
+  const off = panelOffset();
+  const c = toWorld(off + (W - off)/2, H/2);
+  const id = 'esp-' + Date.now().toString(36);
+  spaces.push({id, name:'Novo espaço', kind:'building', x:Math.round(c.x - 60), y:Math.round(c.y - 40), w:120, h:80});
+  rebuildGrid(); renderList();
+  setEdit(true); select(id);
+  $('edName').focus(); $('edName').select();
+  save();
+};
+
+/* Alunos */
+function updateCount(){ $('kidCount').firstChild.nodeValue = kids.length; }
+$('add1').onclick = () => { addKid(); save(); };
+$('add10').onclick = () => { for (let i = 0; i < 10; i++) addKid(); save(); };
+$('clearKids').onclick = () => { kids = []; updateCount(); save(); };
+$('pauseKids').onclick = () => { paused = !paused; $('pauseKids').textContent = paused ? '▶ Continuar' : '❚❚ Pausar'; $('pauseKids').classList.toggle('on', paused); };
+function setPlacing(on){
+  placing = on; $('placeKid').classList.toggle('on', on); cv.classList.toggle('placing', on);
+  if (on){ if (editMode) setEdit(false); toast('Clique no mapa para colocar alunos'); }
+}
+$('placeKid').onclick = () => setPlacing(!placing);
+document.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
+  S.mode = b.dataset.mode; syncControls(); save();
+  for (const k of kids){ if (k.state !== 'inside' && k.state !== 'entering'){ k.timer = Math.random()*0.6; k.state = 'idle'; k.path = []; k.playT = 0; k.zone = null; } }
+  toast(S.mode === 'aula' ? 'Hora da aula! Todos para as salas' : S.mode === 'recreio' ? 'Recreio!' : 'Passeio pela escola');
+});
+
+/* Guardar */
+$('copyCfg').onclick = () => {
+  const txt = JSON.stringify({spaces, trees, settings:S});
+  const done = () => toast('Configuração copiada');
+  try {
+    navigator.clipboard.writeText(txt).then(done).catch(() => { $('cfgIn').value = txt; $('cfgIn').select(); toast('Selecionei o texto: copie com Ctrl+C'); });
+  } catch(e){ $('cfgIn').value = txt; $('cfgIn').select(); toast('Selecionei o texto: copie com Ctrl+C'); }
+};
+$('loadCfg').onclick = () => {
+  try {
+    const cfg = JSON.parse($('cfgIn').value);
+    if (!cfg || !Array.isArray(cfg.spaces)) throw new Error();
+    applyConfig(cfg); afterConfig(); toast('Configuração carregada');
+  } catch(e){ toast('Esse texto não é uma configuração válida'); }
+};
+let resetArmed = false;
+$('resetAll').onclick = () => {
+  if (!resetArmed){ resetArmed = true; $('resetAll').classList.add('armed'); $('resetAll').textContent = 'Confirmar restaurar'; setTimeout(() => { resetArmed = false; $('resetAll').classList.remove('armed'); $('resetAll').textContent = 'Restaurar original'; }, 3500); return; }
+  applyConfig(null); afterConfig(); toast('Mapa original restaurado');
+  resetArmed = false; $('resetAll').classList.remove('armed'); $('resetAll').textContent = 'Restaurar original';
+};
+function afterConfig(){
+  selected = null; rebuildGrid(); renderList(); renderEditor(); syncControls(); fit();
+  const n = Math.min(300, S.kidCount | 0); kids = []; for (let i = 0; i < n; i++){ const p = pickSpawn(); addKid(p.x, p.y); }
+  updateCount(); save();
+}
+function pickSpawn(){ const p = cellCenter(pick(reachList)); return p; }
+
+/* ---------- Início ---------- */
+window.addEventListener('resize', resize);
+resize();
+if (W < 700) document.body.classList.add('panel-closed');
+loadState();
+rebuildGrid();
+renderList(); renderEditor(); syncControls();
+{ const n = Math.min(300, S.kidCount | 0); for (let i = 0; i < n; i++){ const p = pickSpawn(); addKid(p.x, p.y); } }
+updateCount();
+requestAnimationFrame(t => { last = t; frame(t); });
+})();
+</script>
+
+</body>
+</html>
